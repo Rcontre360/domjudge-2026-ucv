@@ -5,6 +5,8 @@ import * as autoscaling from 'aws-cdk-lib/aws-autoscaling';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export class InfraStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -15,17 +17,8 @@ export class InfraStack extends cdk.Stack {
       throw new Error('sshPublicKey context is required. Add it to cdk.json under "context".');
     }
 
-    // 1. VPC restricted to 1 Availability Zone
-    const vpc = new ec2.Vpc(this, 'DomjudgeVpc', {
-      maxAzs: 1,
-      natGateways: 0,
-      subnetConfiguration: [
-        {
-          name: 'Public',
-          subnetType: ec2.SubnetType.PUBLIC,
-        },
-      ],
-    });
+    // 1. Use the default VPC — no need for a custom one for a single public instance
+    const vpc = ec2.Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
 
     // 2. Persistent EBS Volume (Standalone) — RETAIN keeps data even if stack is deleted
     const volume = new ec2.Volume(this, 'DomjudgeDataVolume', {
@@ -55,7 +48,10 @@ export class InfraStack extends cdk.Stack {
     const asg = new autoscaling.AutoScalingGroup(this, 'DomjudgeASG', {
       vpc,
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MEDIUM),
-      machineImage: ec2.MachineImage.latestAmazonLinux2023(),
+      machineImage: ec2.MachineImage.fromSsmParameter(
+        '/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id',
+        { os: ec2.OperatingSystemType.LINUX },
+      ),
       minCapacity: 1,
       maxCapacity: 1,
       securityGroup,
@@ -73,49 +69,14 @@ export class InfraStack extends cdk.Stack {
       resources: ['*'],
     }));
 
-    // 8. UserData: runs on every boot — self-heals EIP + EBS, then starts the app
-    const volumeId = volume.volumeId;
-    const allocationId = eip.ref; // eip.ref resolves to allocation ID for VPC EIPs
+    // 8. UserData: inject CDK-resolved values then run the shared script
+    const userDataLines = fs.readFileSync(path.join(__dirname, 'user-data.sh'), 'utf-8').split('\n');
 
     asg.addUserData(
-      'yum update -y',
-      'yum install -y docker git nvme-cli',
-      'systemctl start docker',
-      'systemctl enable docker',
-
-      // Fetch instance ID via IMDSv2
-      'TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")',
-      'INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)',
-
-      // Associate the static Elastic IP — eip.ref is the allocation ID, so use --allocation-id
-      `aws ec2 associate-address --instance-id $INSTANCE_ID --allocation-id ${allocationId} --region ${this.region}`,
-
-      // Attach the persistent EBS volume
-      `aws ec2 attach-volume --volume-id ${volumeId} --instance-id $INSTANCE_ID --device /dev/sdf --region ${this.region}`,
-
-      // Wait until AWS reports the volume as in-use before trying to mount
-      `aws ec2 wait volume-in-use --volume-ids ${volumeId} --region ${this.region}`,
-      'sleep 5',
-
-      // On Nitro-based instances (t3), /dev/sdf is exposed as an NVMe device.
-      // Resolve the real device via the stable by-id symlink using the volume ID.
-      `DEVICE=$(readlink -f /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$(echo "${volumeId}" | sed 's/-//'))`,
-
-      'mkdir -p /mnt/domjudge',
-      'blkid $DEVICE || mkfs -t xfs $DEVICE',
-      'mount $DEVICE /mnt/domjudge',
-      `echo "$DEVICE /mnt/domjudge xfs defaults,nofail 0 2" >> /etc/fstab`,
-
-      // Install Docker Compose
-      'curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose',
-      'chmod +x /usr/local/bin/docker-compose',
-
-      // Clone repo on first boot; pull updates on subsequent boots
-      'cd /mnt/domjudge',
-      'if [ ! -d ".git" ]; then git clone https://github.com/Rcontre360/domjudge-2026-ucv.git .; else git pull; fi',
-
-      // Start the app
-      'docker-compose up -d',
+      `export VOLUME_ID="${volume.volumeId}"`,
+      `export ALLOCATION_ID="${eip.ref}"`,
+      `export AWS_REGION="${this.region}"`,
+      ...userDataLines,
     );
 
     // 9. CloudFront for HTTPS termination — no caching, forwards all headers for sessions

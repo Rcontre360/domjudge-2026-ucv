@@ -25,5 +25,5 @@ if [ -z "$IP" ] || [ "$IP" = "None" ]; then
   exit 1
 fi
 
-echo "Connecting to ec2-user@$IP using key: $KEY"
-exec ssh -i "$KEY" -o StrictHostKeyChecking=no ec2-user@"$IP"
+echo "Connecting to ubuntu@$IP using key: $KEY"
+exec ssh -i "$KEY" -o StrictHostKeyChecking=no ubuntu@"$IP"

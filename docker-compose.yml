@@ -35,6 +35,7 @@ services:
     volumes:
       - domserver-data:/opt/domjudge/domserver/state
       - ./teams.csv:/teams.csv:ro
+      - ./problems:/problems:ro
     networks:
       - domjudge-net
 

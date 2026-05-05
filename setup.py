@@ -3,6 +3,7 @@ import json
 import time
 import subprocess
 import csv
+import zipfile
 
 def wait_for_api():
     print("Waiting for DOMjudge API to be fully ready (this can take up to 2 minutes)...")
@@ -29,6 +30,22 @@ def api_call(endpoint, json_data):
     ]
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return result.stdout.strip()
+
+def api_upload_problem(zip_path):
+    cmd = [
+        '/opt/domjudge/domserver/webapp/bin/console',
+        'api:call', '-m', 'POST', f'-fzip={zip_path}', 'problems'
+    ]
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    return result.stdout.strip()
+
+def zip_problem_directory(pdir, zip_path):
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(pdir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, pdir)
+                zf.write(file_path, arcname)
 
 def set_system_passwords(admin_user, admin_pass, judge_pass):
     admin_hash = subprocess.check_output(['php', '-r', f'echo password_hash("{admin_pass}", PASSWORD_BCRYPT);']).decode('utf-8').strip()
@@ -98,6 +115,20 @@ def main():
         except subprocess.CalledProcessError as e:
             print(f"Error importing accounts: {e.stderr.strip() if e.stderr else e.stdout.strip()}")
             
+    print("Checking for problem directories to upload...")
+    if os.path.exists('/problems'):
+        for entry in os.listdir('/problems'):
+            pdir = os.path.join('/problems', entry)
+            if os.path.isdir(pdir):
+                print(f"Zipping and uploading problem '{entry}'...")
+                zip_path = f'/tmp/{entry}.zip'
+                zip_problem_directory(pdir, zip_path)
+                try:
+                    res = api_upload_problem(zip_path)
+                    print(f"Success for {entry}: {res}")
+                except subprocess.CalledProcessError as e:
+                    print(f"Error uploading {entry}: {e.stderr.strip() if e.stderr else e.stdout.strip()}")
+
     print("Automated setup complete!")
 
 if __name__ == "__main__":

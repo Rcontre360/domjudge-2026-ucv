@@ -1,0 +1,4 @@
+name: "Ruta Hiperespacial"
+limits:
+  memory: 128
+  time_multiplier: 5.0

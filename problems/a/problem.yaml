@@ -1,0 +1,3 @@
+name: "Gestión de Recursos de la Flota"
+limits:
+  memory: 128

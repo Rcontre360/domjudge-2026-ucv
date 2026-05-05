@@ -1,0 +1,4 @@
+name: "Rascacielos en Coruscant"
+limits:
+  memory: 128
+  time_multiplier: 5.0

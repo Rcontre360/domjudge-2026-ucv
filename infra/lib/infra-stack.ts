@@ -10,9 +10,14 @@ export class InfraStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    const sshPublicKey = this.node.tryGetContext('sshPublicKey') as string;
+    if (!sshPublicKey) {
+      throw new Error('sshPublicKey context is required. Add it to cdk.json under "context".');
+    }
+
     // 1. VPC restricted to 1 Availability Zone
     const vpc = new ec2.Vpc(this, 'DomjudgeVpc', {
-      maxAzs: 1, 
+      maxAzs: 1,
       natGateways: 0,
       subnetConfiguration: [
         {
@@ -22,26 +27,31 @@ export class InfraStack extends cdk.Stack {
       ],
     });
 
-    // 2. Persistent EBS Volume (Standalone)
+    // 2. Persistent EBS Volume (Standalone) — RETAIN keeps data even if stack is deleted
     const volume = new ec2.Volume(this, 'DomjudgeDataVolume', {
       availabilityZone: vpc.availabilityZones[0],
-      size: cdk.Size.gibibels(20),
+      size: cdk.Size.gibibytes(20),
       volumeType: ec2.EbsDeviceVolumeType.GP3,
-      removalPolicy: cdk.RemovalPolicy.RETAIN, // Keep data even if stack is deleted
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
     // 3. Static IP (Elastic IP)
     const eip = new ec2.CfnEIP(this, 'DomjudgeEIP');
 
-    // 4. Security Group
+    // 4. SSH Key Pair — imported from the public key provided via context
+    const keyPair = new ec2.KeyPair(this, 'DomjudgeKeyPair', {
+      publicKeyMaterial: sshPublicKey,
+    });
+
+    // 5. Security Group — SSH is restricted to key-based auth via the key pair above
     const securityGroup = new ec2.SecurityGroup(this, 'DomjudgeSG', {
       vpc,
       allowAllOutbound: true,
     });
-    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Allow HTTP');
-    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow SSH');
+    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'HTTP from CloudFront');
+    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'SSH key-only');
 
-    // 5. Auto Scaling Group
+    // 6. Auto Scaling Group (min=max=1 gives auto-restart without scaling)
     const asg = new autoscaling.AutoScalingGroup(this, 'DomjudgeASG', {
       vpc,
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MEDIUM),
@@ -49,10 +59,11 @@ export class InfraStack extends cdk.Stack {
       minCapacity: 1,
       maxCapacity: 1,
       securityGroup,
+      keyPair,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
     });
 
-    // 6. Permissions for the instance to manage its own IP and Volume
+    // 7. Permissions for the instance to re-attach its own IP and volume on restart
     asg.addToRolePolicy(new iam.PolicyStatement({
       actions: [
         'ec2:AttachVolume',
@@ -62,35 +73,52 @@ export class InfraStack extends cdk.Stack {
       resources: ['*'],
     }));
 
-    // 7. UserData: Self-configuration on boot
+    // 8. UserData: runs on every boot — self-heals EIP + EBS, then starts the app
     const volumeId = volume.volumeId;
-    const staticIp = eip.ref;
+    const allocationId = eip.ref; // eip.ref resolves to allocation ID for VPC EIPs
 
     asg.addUserData(
       'yum update -y',
-      'yum install -y docker git',
+      'yum install -y docker git nvme-cli',
       'systemctl start docker',
       'systemctl enable docker',
-      // Get Instance ID
+
+      // Fetch instance ID via IMDSv2
       'TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")',
       'INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)',
-      // Associate Static IP
-      `aws ec2 associate-address --instance-id $INSTANCE_ID --public-ip ${staticIp} --region ${this.region}`,
-      // Attach EBS Volume
+
+      // Associate the static Elastic IP — eip.ref is the allocation ID, so use --allocation-id
+      `aws ec2 associate-address --instance-id $INSTANCE_ID --allocation-id ${allocationId} --region ${this.region}`,
+
+      // Attach the persistent EBS volume
       `aws ec2 attach-volume --volume-id ${volumeId} --instance-id $INSTANCE_ID --device /dev/sdf --region ${this.region}`,
-      // Wait for volume to be attached
-      'sleep 10',
-      // Format if new, then mount
+
+      // Wait until AWS reports the volume as in-use before trying to mount
+      `aws ec2 wait volume-in-use --volume-ids ${volumeId} --region ${this.region}`,
+      'sleep 5',
+
+      // On Nitro-based instances (t3), /dev/sdf is exposed as an NVMe device.
+      // Resolve the real device via the stable by-id symlink using the volume ID.
+      `DEVICE=$(readlink -f /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$(echo "${volumeId}" | sed 's/-//'))`,
+
       'mkdir -p /mnt/domjudge',
-      'blkid /dev/sdf || mkfs -t xfs /dev/sdf',
-      'mount /dev/sdf /mnt/domjudge',
-      'echo "/dev/sdf /mnt/domjudge xfs defaults,nofail 0 2" >> /etc/fstab',
+      'blkid $DEVICE || mkfs -t xfs $DEVICE',
+      'mount $DEVICE /mnt/domjudge',
+      `echo "$DEVICE /mnt/domjudge xfs defaults,nofail 0 2" >> /etc/fstab`,
+
       // Install Docker Compose
       'curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose',
-      'chmod +x /usr/local/bin/docker-compose'
+      'chmod +x /usr/local/bin/docker-compose',
+
+      // Clone repo on first boot; pull updates on subsequent boots
+      'cd /mnt/domjudge',
+      'if [ ! -d ".git" ]; then git clone https://github.com/Rcontre360/domjudge-2026-ucv.git .; else git pull; fi',
+
+      // Start the app
+      'docker-compose up -d',
     );
 
-    // 8. CloudFront for HTTPS (Points to the Static IP)
+    // 9. CloudFront for HTTPS termination — no caching, forwards all headers for sessions
     const cf = new cloudfront.Distribution(this, 'DomjudgeProxy', {
       defaultBehavior: {
         origin: new origins.HttpOrigin(eip.attrPublicIp),
@@ -101,7 +129,7 @@ export class InfraStack extends cdk.Stack {
       },
     });
 
-    new cdk.CfnOutput(this, 'StaticIP', { value: eip.ref });
+    new cdk.CfnOutput(this, 'StaticIP', { value: eip.attrPublicIp });
     new cdk.CfnOutput(this, 'HttpsUrl', { value: `https://${cf.distributionDomainName}` });
   }
 }

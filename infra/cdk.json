@@ -17,6 +17,7 @@
     ]
   },
   "context": {
+    "sshPublicKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFqxQX95vHU9X9Z6NoG8OElNCtOmAlgopeye3AyK8R0K rafael@rafaelAcer",
     "@aws-cdk/aws-signer:signingProfileNamePassedToCfn": true,
     "@aws-cdk/aws-ecs-patterns:secGroupsDisablesImplicitOpenListener": true,
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,

@@ -2,4 +2,5 @@ temp
 *.zip
 solutions
 problems/*/submissions/*
+keys/*
 

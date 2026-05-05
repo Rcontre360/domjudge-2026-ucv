@@ -1,0 +1,63 @@
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: domjudge-mariadb
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpw
+      - MYSQL_USER=domjudge
+      - MYSQL_PASSWORD=djpw
+      - MYSQL_DATABASE=domjudge
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      - domjudge-net
+
+  domserver:
+    image: domjudge/domserver:latest
+    container_name: domjudge-domserver
+    restart: unless-stopped
+    ports:
+      - "${DOMSERVER_PORT:-8080}:80"
+    environment:
+      - MYSQL_HOST=mariadb
+      - MYSQL_USER=domjudge
+      - MYSQL_PASSWORD=djpw
+      - MYSQL_DATABASE=domjudge
+      - MYSQL_ROOT_PASSWORD=rootpw
+      - TZ=UTC
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - JUDGEDAEMON_PASSWORD=${JUDGEHOST_PASSWORD}
+      - DJ_DB_INSTALL_BARE=1
+    depends_on:
+      - mariadb
+    volumes:
+      - domserver-data:/opt/domjudge/domserver/state
+      - ./teams.csv:/teams.csv:ro
+    networks:
+      - domjudge-net
+
+  judgehost:
+    image: domjudge/judgehost:latest
+    container_name: domjudge-judgehost
+    privileged: true
+    cgroup: host
+    restart: unless-stopped
+    environment:
+      - DOMSERVER_HOST=http://domserver/
+      - JUDGEDAEMON_PASSWORD=${JUDGEHOST_PASSWORD:-judgehostpw}
+      - TZ=UTC
+    depends_on:
+      - domserver
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+    networks:
+      - domjudge-net
+
+networks:
+  domjudge-net:
+
+volumes:
+  mariadb-data:
+  domserver-data:

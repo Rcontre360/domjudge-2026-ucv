@@ -1,0 +1,5 @@
+temp
+*.zip
+solutions
+problems/*/submissions/*
+

@@ -31,10 +31,10 @@ def api_call(endpoint, json_data):
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return result.stdout.strip()
 
-def api_upload_problem(zip_path):
+def api_upload_problem(zip_path, problem_id):
     cmd = [
         '/opt/domjudge/domserver/webapp/bin/console',
-        'api:call', '-m', 'POST', f'-fzip={zip_path}', 'problems'
+        'api:call', '-m', 'POST', f'-fzip={zip_path}', '-d', f'problem={problem_id}', 'problems'
     ]
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return result.stdout.strip()
@@ -124,7 +124,7 @@ def main():
                 zip_path = f'/tmp/{entry}.zip'
                 zip_problem_directory(pdir, zip_path)
                 try:
-                    res = api_upload_problem(zip_path)
+                    res = api_upload_problem(zip_path, entry)
                     print(f"Success for {entry}: {res}")
                 except subprocess.CalledProcessError as e:
                     print(f"Error uploading {entry}: {e.stderr.strip() if e.stderr else e.stdout.strip()}")

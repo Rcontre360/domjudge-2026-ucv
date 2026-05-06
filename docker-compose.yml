@@ -36,8 +36,25 @@ services:
       - domserver-data:/opt/domjudge/domserver/state
       - ./teams.csv:/teams.csv:ro
       - ./problems:/problems:ro
+      - ./setup.py:/setup.py:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -x /opt/domjudge/domserver/webapp/bin/console"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
     networks:
       - domjudge-net
+
+  setup:
+    image: docker:cli
+    container_name: domjudge-setup
+    depends_on:
+      domserver:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: "no"
+    command: docker exec domjudge-domserver python3 /setup.py
 
   judgehost:
     image: domjudge/judgehost:latest

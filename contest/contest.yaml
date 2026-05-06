@@ -1,0 +1,11 @@
+short-name: test
+name: Test Contest
+formal_name: Test Contest
+# start_time is filled in by upload.py at runtime (use the literal string __START_TIME__)
+start_time: __START_TIME__
+duration: 0:30:00.000
+penalty_time: 20
+problems:
+  - letter: A
+    short-name: a
+    color: '#ff0000'

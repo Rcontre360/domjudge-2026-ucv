@@ -1,4 +1,0 @@
-name: "Cumbre Galáctica"
-limits:
-  memory: 128
-  time_multiplier: 5.0

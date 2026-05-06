@@ -1,7 +1,8 @@
 temp
 *.zip
 solutions
-problems/*/submissions/*
+problems/*
+!problems/upload.py
 keys/*
 .env
 new_problems

@@ -34,8 +34,6 @@ services:
       - mariadb
     volumes:
       - domserver-data:/opt/domjudge/domserver/state
-      - ./teams.csv:/teams.csv:ro
-      - ./problems:/problems:ro
       - ./setup.py:/setup.py:ro
     healthcheck:
       test: ["CMD-SHELL", "test -x /opt/domjudge/domserver/webapp/bin/console"]
@@ -56,9 +54,28 @@ services:
     restart: "no"
     command: docker exec domjudge-domserver python3 /setup.py
 
-  judgehost:
+  judgehost-1:
     image: domjudge/judgehost:latest
-    container_name: domjudge-judgehost
+    container_name: domjudge-judgehost-1
+    hostname: judgehost-1
+    privileged: true
+    cgroup: host
+    restart: unless-stopped
+    environment:
+      - DOMSERVER_HOST=http://domserver/
+      - JUDGEDAEMON_PASSWORD=${JUDGEHOST_PASSWORD:-judgehostpw}
+      - TZ=UTC
+    depends_on:
+      - domserver
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+    networks:
+      - domjudge-net
+
+  judgehost-2:
+    image: domjudge/judgehost:latest
+    container_name: domjudge-judgehost-2
+    hostname: judgehost-2
     privileged: true
     cgroup: host
     restart: unless-stopped

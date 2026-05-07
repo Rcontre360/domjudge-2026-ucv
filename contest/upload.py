@@ -44,7 +44,8 @@ def load_dotenv(path: str) -> None:
 load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
 
-def upload_contest(host: str, auth, yaml_path: str) -> None:
+def upload_contest(host: str, auth, yaml_path: str) -> str:
+    """Create the contest and return its external id (short-name)."""
     with open(yaml_path) as f:
         yaml_text = f.read()
     start = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
@@ -53,10 +54,38 @@ def upload_contest(host: str, auth, yaml_path: str) -> None:
     url = host.rstrip("/") + "/api/contests"
     files = {"yaml": ("contest.yaml", yaml_text, "application/x-yaml")}
     r = requests.post(url, files=files, auth=auth)
-    if r.ok:
-        print(f"Contest created: {r.text}")
-    else:
+    if not r.ok:
         sys.exit(f"Error creating contest: {r.status_code} {r.text}")
+    print(f"Contest created: {r.text}")
+
+    # The endpoint returns the contest's external id as a quoted JSON string
+    cid = r.text.strip().strip('"')
+    return cid
+
+
+def link_problems(host: str, auth, cid: str, problems_path: str) -> None:
+    if not os.path.isfile(problems_path):
+        print(f"No problems file at {problems_path} — skipping problem linking")
+        return
+
+    with open(problems_path) as f:
+        entries = json.load(f)
+
+    base = host.rstrip("/") + f"/api/contests/{cid}/problems"
+    for entry in entries:
+        problem_id = entry["id"]
+        payload = {
+            "label": entry["label"],
+            "color": entry.get("color"),
+            "rgb": entry.get("rgb"),
+            "points": entry.get("points", 1),
+            "lazyEvalResults": entry.get("lazy_eval_results", 0),
+        }
+        r = requests.put(f"{base}/{problem_id}", json=payload, auth=auth)
+        if r.ok:
+            print(f"Linked problem {problem_id} as {entry['label']}")
+        else:
+            print(f"Error linking {problem_id}: {r.status_code} {r.text}", file=sys.stderr)
 
 
 def post_json(host: str, auth, endpoint: str, payload) -> None:
@@ -107,13 +136,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Upload the contest and its teams to DomJudge.")
     parser.add_argument("host", help="DomJudge host URL (e.g. http://localhost:8080)")
     parser.add_argument("--yaml", default=os.path.join(HERE, "contest.yaml"))
+    parser.add_argument("--problems", default=os.path.join(HERE, "problems.json"))
     parser.add_argument("--teams", default=os.path.join(HERE, "teams.csv"))
     parser.add_argument("--user", default=os.environ.get("ADMIN_USERNAME", "admin"))
     parser.add_argument("--password", default=os.environ.get("ADMIN_PASSWORD", "adminpassword"))
     args = parser.parse_args()
 
     auth = (args.user, args.password)
-    upload_contest(args.host, auth, args.yaml)
+    cid = upload_contest(args.host, auth, args.yaml)
+    link_problems(args.host, auth, cid, args.problems)
     upload_teams(args.host, auth, args.teams)
 
 

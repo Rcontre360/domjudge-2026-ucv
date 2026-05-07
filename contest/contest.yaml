@@ -5,7 +5,3 @@ formal_name: Test Contest
 start_time: __START_TIME__
 duration: 0:30:00.000
 penalty_time: 20
-problems:
-  - letter: A
-    short-name: a
-    color: '#ff0000'

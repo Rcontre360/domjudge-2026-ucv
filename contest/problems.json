@@ -1,3 +1,5 @@
 [
-  {"id": "a", "label": "A", "rgb": "#ff0000"}
+  {"id": "a", "label": "A", "rgb": "#ff0000"},
+  {"id": "b", "label": "B", "rgb": "#00aa00"},
+  {"id": "c", "label": "C", "rgb": "#0066ff"}
 ]

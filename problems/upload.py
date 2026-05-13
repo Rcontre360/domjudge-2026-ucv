@@ -63,6 +63,7 @@ def main() -> None:
     args = parser.parse_args()
 
     auth = (args.user, args.password)
+    print(args.user,args.password)
 
     for entry in sorted(os.listdir(HERE)):
         pdir = os.path.join(HERE, entry)

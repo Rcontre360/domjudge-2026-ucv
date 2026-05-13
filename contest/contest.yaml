@@ -1,7 +1,62 @@
-short-name: test
-name: Test Contest
-formal_name: Test Contest
-# start_time is filled in by upload.py at runtime (use the literal string __START_TIME__)
+# Contest descriptor consumed by contest/upload.py.
+# Only fields actually parsed by DomJudge's ImportExportService::importContestData
+# are listed below. Active fields are uploaded as-is; commented fields are
+# optional knobs you can uncomment and tune.
+
+# --- Identification ---
+short-name: test              # External id / URL slug. Accepted aliases: short_name, shortname, id.
+name: Test Contest            # Display name. Falls back to formal_name when omitted.
+# formal_name: Test Contest   # Alternative for `name`. The importer maps both to the same field.
+
+# --- Schedule ---
+# start_time accepts an ISO-8601 timestamp with timezone, e.g.
+#   2026-06-15T18:00:00+00:00
+# The literal __START_TIME__ is replaced at upload time with the current UTC
+# time, so the contest starts immediately after the upload script finishes.
+# Accepted alias: start-time.
 start_time: __START_TIME__
-duration: 0:30:00.000
-penalty_time: 20
+
+duration: 0:30:00.000         # Wall-clock length of the contest (HH:MM:SS.fff). Required.
+
+# activate_time: 2026-06-15T17:00:00+00:00
+#   When the contest becomes visible to participants. Defaults to "now" if absent.
+#   Accepted aliases: activation_time, activate-time, activation-time.
+
+# deactivate_time: 2026-06-15T20:00:00+00:00
+#   When the contest is hidden again. Accepted aliases: deactivation_time,
+#   deactivate-time, deactivation-time.
+
+# --- Scoring ---
+penalty_time: 20              # Penalty minutes per wrong submission before AC.
+                              # Accepted aliases: penalty-time, penalty.
+
+# --- Scoreboard freeze ---
+# Pick ONE of the two forms below.
+#
+# scoreboard_freeze_duration: 0:05:00
+#   Freeze the public scoreboard during the last N of the contest.
+#   Aliases: scoreboard-freeze-duration, scoreboard-freeze-length.
+#
+# freeze: 0:25:00
+#   Freeze offset from contest start. Aliases: scoreboard-freeze.
+
+# --- Visibility ---
+# public: true                # Whether non-participants can see the contest. Defaults to true.
+
+# --- Medals ---
+# Awards are granted only when at least one team category is visible. The
+# `medals` block sets the count for each tier.
+# medals:
+#   gold: 4
+#   silver: 4
+#   bronze: 4
+
+# --- Misc ---
+# warning_message: "Be kind to the judges."
+#   Free-form banner shown on the contest page. Alias: warning-message.
+
+# shadow:                     # Mirror another CCS instance as a shadow judge.
+#   source: dj                # Backend type (dj, ccs).
+#   url: https://upstream.example.com/api
+#   username: shadow
+#   password: secret

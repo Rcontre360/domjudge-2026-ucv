@@ -27,6 +27,16 @@ def set_system_passwords(admin_user, admin_pass, judge_pass):
     print("System passwords updated successfully.")
 
 
+def configure_languages():
+    """Enable only C, C++, and Python 3 (PyPy3); disable everything else."""
+    allowed = "'c','cpp','py3'"
+    subprocess.run([
+        'mysql', '-h', 'mariadb', '-u', 'root', '-prootpw', 'domjudge', '-e',
+        f"UPDATE language SET allow_submit = (langid IN ({allowed}));",
+    ], check=True)
+    print(f"Enabled languages: {allowed}; all others disabled.")
+
+
 def main():
     if not wait_for_api():
         return
@@ -37,6 +47,9 @@ def main():
 
     print("Setting system passwords...")
     set_system_passwords(admin_user, admin_pass, judge_pass)
+
+    print("Configuring languages...")
+    configure_languages()
 
     print("Automated setup complete!")
 

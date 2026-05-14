@@ -1,9 +1,37 @@
 [
-  {"id": "a", "label": "A", "rgb": "#ff0000"},
-  {"id": "b", "label": "B", "rgb": "#00aa00"},
-  {"id": "c", "label": "C", "rgb": "#0066ff"},
-  {"id": "d", "label": "D", "rgb": "#ffaa00"},
-  {"id": "e", "label": "E", "rgb": "#aa00ff"},
-  {"id": "f", "label": "F", "rgb": "#00aaaa"},
-  {"id": "g", "label": "G", "rgb": "#ff66cc"}
+  {
+    "id": "carrera",
+    "label": "carrera",
+    "rgb": "#ff0000"
+  },
+  {
+    "id": "desfile",
+    "label": "desfile",
+    "rgb": "#00aa00"
+  },
+  {
+    "id": "despliegue",
+    "label": "despliegue",
+    "rgb": "#0066ff"
+  },
+  {
+    "id": "enemigos",
+    "label": "enemigos",
+    "rgb": "#ffaa00"
+  },
+  {
+    "id": "hermanos",
+    "label": "hermanos",
+    "rgb": "#aa00ff"
+  },
+  {
+    "id": "monumento",
+    "label": "monumento",
+    "rgb": "#00aaaa"
+  },
+  {
+    "id": "venenosa",
+    "label": "venenosa",
+    "rgb": "#ff66cc"
+  }
 ]

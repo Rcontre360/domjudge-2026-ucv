@@ -109,7 +109,8 @@ def upload_teams(host: str, auth, csv_path: str) -> None:
     with open(csv_path) as f:
         reader = csv.reader(f)
         for row in reader:
-            if not row or row[0].startswith("#"):
+            row = [cell.strip() for cell in row]
+            if not row or not row[0] or row[0].startswith("#"):
                 continue
             team_name, username, password = row[0], row[1], row[2]
             teams.append({
@@ -143,8 +144,8 @@ def main() -> None:
     args = parser.parse_args()
 
     auth = (args.user, args.password)
-    cid = upload_contest(args.host, auth, args.yaml)
-    link_problems(args.host, auth, cid, args.problems)
+    # cid = upload_contest(args.host, auth, args.yaml)
+    # link_problems(args.host, auth, cid, args.problems)
     upload_teams(args.host, auth, args.teams)
 
 
